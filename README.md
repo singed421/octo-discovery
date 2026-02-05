@@ -47,19 +47,117 @@ The code uses these main Python packages:
 - `yt-dlp`
 
 ---
+## To-do
+- Some tracks didn't match
+- 
+## Installation
 
-## Install
-
-### 1) Clone & create a virtual environment
+### 1) Clone the repository
 
 ```bash
 git clone <your-repo-url>
 cd <your-repo-folder>
+```
 
+### 2) Create & activate a virtual environment
+```bash
 python -m venv .venv
-# Linux/macOS
-source .venv/bin/activate
-# Windows (PowerShell)
-# .venv\Scripts\Activate.ps1
+```
 
-Install the requirements, create a .env file and launch the main.py
+# Linux/macOS
+```bash
+source .venv/bin/activate
+```
+# Windows (PowerShell)
+```bash
+# .venv\Scripts\Activate.ps1
+```
+
+### 3) Install Python dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4) Configuration
+
+Create a .env file at the project root:
+```bash
+# ListenBrainz
+LB_BASE_URL=https://api.listenbrainz.org
+LB_USER=your_listenbrainz_username
+# Subsonic / Navidrome
+SUBSONIC_URL=http://your-server:4533
+SUBSONIC_USER=your_subsonic_username
+SUBSONIC_PASS=your_subsonic_password
+# Local music library path (where YouTube downloads will be saved)
+# IMPORTANT: this must be inside (or equal to) the folder your server scans.
+LOCAL_DOWNLOAD_PATH=/path/to/your/music/library
+```
+#### Notes
+LOCAL_DOWNLOAD_PATH must be part of your server’s scanned library, otherwise the rescan step won’t pick up new YouTube downloads.
+The script writes data.json and keeps old_data.json to manage cleanup between weekly runs.
+
+### Usage
+
+Run:
+```bash
+python main.py
+```
+### Behavior:
+
+If the current weekly playlist name matches what’s stored in data.json, the script stops (prevents duplicates).
+
+### Project structure
+
+- main.py — orchestration (fetch → search → download → rescan → playlist → cleanup)
+- lb.py — ListenBrainz API (playlist + tracks)
+- subsonic.py — Subsonic API (search, download external, scan, playlist management, cleanup)
+- youtube.py — YouTube search + download via yt-dlp + matching logic
+- utility.py — normalization, fuzzy scoring, helper utilities
+#### Output files
+- data.json
+_Stores the state of the latest run:_
+- playlist_name
+- subsonic_downloaded (IDs downloaded via external provider and confirmed local after scan)
+- youtube_downloaded (IDs detected after YouTube download + scan)
+- all_tracks_ids (final IDs added to the playlist)
+- not_found (tracks that could not be resolved)
+- already_local (tracks already in the library)
+- old_data.json
+
+# Cleanup & safety
+
+Cleanup is designed to avoid dangerous deletions:
+
+Targets files associated with the previous Weekly Discovery run
+
+Avoids deleting tracks that are:
+
+- still present in any playlist
+- starred/favorited
+- Were already local
+- 
+## ⚠️ If you care about your library integrity, test on a copy or ensure you have backups before enabling aggressive cleanup.
+
+### MIT License
+```
+Copyright (c) 2026
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
