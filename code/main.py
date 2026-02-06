@@ -208,7 +208,7 @@ def main():
             
     else:
         print("No old_data.json found. Skipping cleanup.")    
-
+    data_to_save = {}
     print("--- STEP 6 : CREATE PLAYLIST and data.json ---")
     if success_dl_subsonic or success_dl_youtube:
         data_to_save = {
