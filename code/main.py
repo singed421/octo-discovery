@@ -174,30 +174,7 @@ def main():
                     print(f"Warning: {item['title']} downloaded but not found in Subsonic scan yet.")
                     not_found_tracks.append(item)
 
-
-    print("--- STEP 5 : CREATE PLAYLIST and data.json ---")
-    if success_dl_subsonic or success_dl_youtube:
-        data_to_save = {
-            "playlist_name": playlist_name,
-            "subsonic_downloaded": success_dl_subsonic, # IDs of downloaded songs from subsonic
-            "youtube_downloaded": success_dl_youtube,
-            "all_tracks_ids": full_tracks_ids,
-            "not_found": not_found_tracks,
-            "already_local": already_local
-        }
-
-    else:
-        print("No tracks found or downloaded. Playlist not created.")
-
-    if full_tracks_ids:
-        subsonic.create_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_name, list(full_tracks_ids))
-    else:
-        print("No new tracks to add to a playlist (only local tracks found ?).")
-
-    with open('data.json', 'w', encoding='utf-8') as f:
-        json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-    
-    print("--- STEP 6 : CLEANUP (Old Playlist & Files) ---")
+    print("--- STEP 5 : CLEANUP (Old Playlist & Files) ---")
     if old_data:
         # 1. Récupérer le nom de l'ancienne playlist
         old_name = old_data.get("playlist_name")
@@ -223,7 +200,7 @@ def main():
         
         if to_delete_ids:
             print(f"Starting cleanup of {len(to_delete_ids)} obsolete tracks...")
-            # Appel de la fonction cleaning corrigée
+            # Appel de la fonction cleaning
             deleted_count = subsonic.cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete_ids)
             print(f"Cleanup finished. {deleted_count} files removed.")
         else:
@@ -231,6 +208,29 @@ def main():
             
     else:
         print("No old_data.json found. Skipping cleanup.")    
+
+    print("--- STEP 6 : CREATE PLAYLIST and data.json ---")
+    if success_dl_subsonic or success_dl_youtube:
+        data_to_save = {
+            "playlist_name": playlist_name,
+            "subsonic_downloaded": success_dl_subsonic, # IDs of downloaded songs from subsonic
+            "youtube_downloaded": success_dl_youtube,
+            "all_tracks_ids": full_tracks_ids,
+            "not_found": not_found_tracks,
+            "already_local": already_local
+        }
+
+    else:
+        print("No tracks found or downloaded. Playlist not created.")
+
+    if full_tracks_ids:
+        subsonic.create_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_name, list(full_tracks_ids))
+    else:
+        print("No new tracks to add to a playlist (only local tracks found ?).")
+
+    with open('data.json', 'w', encoding='utf-8') as f:
+        json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+    
 
 if __name__ == "__main__":
     main()
