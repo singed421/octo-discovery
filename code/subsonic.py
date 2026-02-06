@@ -55,55 +55,52 @@ def parse_search(data, target_artist, target_title):
             print(f"   [DEBUG] No songs found in this search batch.")
             return []
             
-    # tracks = octo-fiesta tracks informations       
     tracks = search_res['song']
     tracks_dict = []
     
-    # DEBUG : On affiche combien de candidats on a trouvés
     print(f"   [DEBUG] Found {len(tracks)} candidates. processing...")
 
     for track in tracks:
         track_artist = track['artist']
         track_title = track['title']
         
-        # Nettoyage pour comparaison
-        clean_target_artist = utility.clean_artist_name(target_artist).lower()
-        clean_track_artist = utility.clean_artist_name(track_artist).lower()
-        
-        # 1. Calcul du score standard
+        # 1. Calcul du score brut (sans nettoyage du titre)
         similarity_note = utility.similarity(target_artist, target_title, track_artist, track_title)
-        original_score = similarity_note # pour l'affichage debug
+        raw_score = similarity_note 
         
-        # 2. OPTIMISATION "FEAT" : Tentative avec le titre trouvé "nettoyé"
+        # 2. OPTIMISATION : On nettoie le titre trouvé (enlève (feat. xxx))
+        # Grâce à la modif dans utility.py, cela va transformer "XX FILES (feat. Alpha Wann)" en "XX FILES"
         clean_track_title = utility.clean_artist_name(track_title)
         
         score_boosted = False
+        # Si le nettoyage a changé quelque chose (ex: enlevé le feat), on recalcule
         if clean_track_title != track_title:
              similarity_note_optimized = utility.similarity(target_artist, target_title, track_artist, clean_track_title)
+             # On garde le meilleur score
              if similarity_note_optimized > similarity_note:
                  similarity_note = similarity_note_optimized
                  score_boosted = True
 
-        # Logique d'inclusion artiste (inchangée)
+        # 3. Boost si l'artiste cible est inclus dans l'artiste trouvé (ex: "Jungle Jack" dans "Jungle Jack & Alpha Wann")
+        clean_target_artist = utility.clean_artist_name(target_artist).lower()
+        clean_track_artist = utility.clean_artist_name(track_artist).lower()
+        
         artist_included = False
         if clean_target_artist in clean_track_artist and similarity_note > 0.60:
              similarity_note = max(similarity_note, 0.85)
              artist_included = True
 
-        # --- BLOC D'AFFICHAGE BAVARD ---
-        # On affiche uniquement si le score est un minimum pertinent (> 0.4) pour ne pas spammer,
-        # OU si c'est le morceau spécifique qui pose problème (Jungle Jack).
-        if similarity_note > 0.4 or "Jungle" in track_artist:
+        # --- DEBUG LOGS ---
+        if similarity_note > 0.1:
             print(f"      [Candidate] {track_artist} - {track_title}")
             print(f"          Target: {target_artist} - {target_title}")
-            print(f"          Raw Score: {original_score:.2f}")
+            print(f"          Raw Score: {raw_score:.2f}")
             if score_boosted:
-                print(f"          Boosted Score (feat removed): {similarity_note:.2f} (Cleaned title: {clean_track_title})")
-            if artist_included:
-                print(f"          Artist inclusion boost applied.")
+                print(f"          Cleaned Title Attempt: '{clean_track_title}'")
+                print(f"          New Score: {similarity_note:.2f}")
             print(f"          -> Final Decision: {'KEEP' if similarity_note >= 0.80 else 'REJECT'}")
             print("-" * 10)
-        # -------------------------------
+        # ------------------
 
         if similarity_note < 0.80:
             continue
@@ -116,7 +113,7 @@ def parse_search(data, target_artist, target_title):
             "isexternal": track['isExternal']
         }
         tracks_dict.append(track_info)
-    return tracks_dict    
+    return tracks_dict
 
 def search_octo(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, artist, title):
     url = SUBSONIC_URL+"/rest/search3"
