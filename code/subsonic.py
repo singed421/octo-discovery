@@ -60,11 +60,18 @@ def parse_search(data, target_artist, target_title):
         track_artist = track['artist']
         track_title = track['title']
         
-        # AJOUT : Nettoyage pour comparaison plus souple
         clean_target_artist = utility.clean_artist_name(target_artist).lower()
         clean_track_artist = utility.clean_artist_name(track_artist).lower()
         
-        similarity_note = utility.similarity(target_artist, target_title, track_artist, track_title)        
+        similarity_note = utility.similarity(target_artist, target_title, track_artist, track_title)
+        # Tentative avec le titre trouvé "nettoyé" (sans les (feat. ...))
+        clean_track_title = utility.clean_artist_name(track_title) # clean_artist_name enlève aussi les "feat" et ce qui suit
+        if clean_track_title != track_title:
+             # On recalcule la similarité avec le titre nettoyé
+             similarity_note_optimized = utility.similarity(target_artist, target_title, track_artist, clean_track_title)
+             # On garde le meilleur des deux scores
+             similarity_note = max(similarity_note, similarity_note_optimized)
+             
         if clean_target_artist in clean_track_artist and similarity_note > 0.60:
              # On considère que c'est bon si l'artiste est inclus dedans
              similarity_note = max(similarity_note, 0.85)
