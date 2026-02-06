@@ -247,7 +247,7 @@ def get_playlists_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
         }
         data = subsonic_get_json(url, params)
         if not data:
-            return []
+            continue
         try:
             resp = data.get("subsonic-response", {})
             json_playlist = resp.get("playlist", {})
@@ -256,10 +256,11 @@ def get_playlists_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
                 return []
             for ent in entry:
                 song_id = ent.get('id')
-                all_songs_ids.append(song_id)
+                if song_id:
+                    all_songs_ids.append(song_id)
         except Exception as e:
             print(f"Error parsing playlists: {e}")
-            return []
+            continue
     all_songs_ids = list(dict.fromkeys(all_songs_ids))
     return all_songs_ids
 
@@ -296,11 +297,12 @@ def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_d
     in_playlist_songs = get_playlists_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
     liked_songs = get_liked_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
     playlist_or_starred = set(in_playlist_songs) | set(liked_songs)
+    
     # deduplication
     playlist_or_starred = list(dict.fromkeys(playlist_or_starred))
 
     external_downloaded_subsonic = old_playlist_datas.get("subsonic_downloaded", [])
-    external_downloaded_youtube = old_playlist_datas.get("subsonic_downloaded", [])
+    external_downloaded_youtube = old_playlist_datas.get("youtube_downloaded", [])
     external_downloaded = set(external_downloaded_subsonic) | set(external_downloaded_youtube)
 
     # get list of all the ID that are starred or inside a playlist from the OLD weekly discovery
