@@ -50,7 +50,11 @@ def remove_youtube_junk(text):
 
 def clean_artist_name(artist):
     if not artist: return ""
-    pattern = r"(?i)\s+(?:ft\.?|feat\.?|featuring|vs\.?|&|x|with)\s+.*"
+    # MODIFICATION ICI : On gère les parenthèses ou crochets optionnels avant le "feat"
+    # \s* : espaces optionnels
+    # (?:[\(\[])? : parenthèse ou crochet ouvrant optionnel
+    # \s* : espaces optionnels
+    pattern = r"(?i)\s*(?:[\(\[])?\s*(?:ft\.?|feat\.?|featuring|vs\.?|&|x|with)\b.*"
     return re.sub(pattern, "", artist).strip()
 
 def clean_title(title):
