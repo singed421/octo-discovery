@@ -4,6 +4,10 @@ import re
 import os
 
 def parse_youtube_video(video_entry, target_artist, target_title):
+    """
+    Analyzes a YouTube video entry to determine if it matches the target song.
+    Handles 'Artist - Title' and 'Title - Artist' formats and uses fuzzy matching.
+    """
     yt_raw_title = video_entry.get('title','')
     yt_uploader = video_entry.get('uploader','')
 
@@ -12,11 +16,7 @@ def parse_youtube_video(video_entry, target_artist, target_title):
     best_score = 0.0
     detected_infos = {}
 
-    # Regex intelligente pour séparer :
-    # \s* : espaces optionnels
-    # (?: ... ) : groupe non capturant de séparateurs possibles
-    # -|–|:|\||// : tiret standard, tiret long (ALT+0150), deux points, pipe, ou double slash
-    # \s* : espaces optionnels
+    # Regex to split: "-" or "–" or ":" or "|" or "//"
     separator_pattern = r"\s*(?:-|–|:|\||//)\s*"
     parts = re.split(separator_pattern, yt_clean_title, maxsplit=1)
 
@@ -24,26 +24,21 @@ def parse_youtube_video(video_entry, target_artist, target_title):
         p1 = parts[0].strip()
         p2 = parts[1].strip()
 
-        # ASTUCE ICI : On nettoie aussi les 'feat' dans les morceaux extraits
-        # Cela transforme "Synora Ft. A. Atak Tos" en "Synora"
         p1_clean = utility.clean_artist_name(p1)
         p2_clean = utility.clean_artist_name(p2)
 
-        # A. artist - title
-        # On compare p1 (artist) et p2_clean (title sans feat)
+        # Strategy A: artist - title
         score_a = utility.similarity(target_artist, target_title, p1, p2_clean)
         if score_a > best_score:
             best_score = score_a
             detected_infos = {'artist': p1, 'title': p2_clean}
 
-        # B. title - artist
-        # On compare p2 (artist) et p1_clean (title sans feat)
+        # Strategy B: title - artist
         score_b = utility.similarity(target_artist, target_title, p2, p1_clean)
         if score_b > best_score:
             best_score = score_b
             detected_infos = {'artist': p2, 'title': p1_clean}
-    # 3. Fallback : UPLOADER IS THE ARTIST
-    # On compare l'uploader avec l'artiste cible, et le titre complet avec le titre cible
+    # Fallback: Check if the Uploader is the Artist
     yt_title_no_feat = utility.clean_artist_name(yt_clean_title)
     score_uploader_raw = utility.similarity(target_artist, target_title, yt_uploader, yt_clean_title)
     score_uploader_clean = utility.similarity(target_artist, target_title, yt_uploader, yt_title_no_feat)
@@ -61,6 +56,7 @@ def parse_youtube_video(video_entry, target_artist, target_title):
     return best_score, detected_infos
 
 def search_yt(artist, title, limit=5):
+    """Searches YouTube with multiple query variations to find the best audio match."""
     print(f"Searching YT for: {artist} - {title}")
 
     cleaned_artist = utility.clean_artist_name(artist)
@@ -123,6 +119,7 @@ def search_yt(artist, title, limit=5):
     return best_match
 
 def download_yt(match_info, BASE_FOLDER):
+    """Downloads the selected YouTube video as an MP3 with embedded metadata."""
     if not match_info or not match_info['url']:
         print("No valid information.")
         return False
