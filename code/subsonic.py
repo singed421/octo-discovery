@@ -2,8 +2,11 @@ import requests
 import time
 import utility
 import os
+from thefuzz import fuzz
+import re
 
 def subsonic_error_from_json(data):
+    """Checks if the Subsonic response contains a failed status and returns the error code/message."""
     try:
         sr = data.get("subsonic-response", {})
         if sr.get("status") == "failed":
@@ -16,6 +19,7 @@ def subsonic_error_from_json(data):
     return None
 
 def subsonic_get_json(url, params, tries=3, timeout=30):
+    """Performs a GET request to the Subsonic API with retry logic and JSON validation."""
     last_exc = None
     for attempt in range(1, tries + 1):
         try:
@@ -47,6 +51,10 @@ def perform_requests(url, params):
     return subsonic_get_json(url, params, tries=3, timeout=30)
     
 def parse_search(data, target_artist, target_title):
+    """
+    Parses Subsonic search results and calculates similarity scores.
+    Optimizes results by cleaning titles and checking for artist inclusions.
+    """
     if not data or 'subsonic-response' not in data or 'searchResult3' not in data['subsonic-response']:
             return []
         
@@ -116,6 +124,7 @@ def parse_search(data, target_artist, target_title):
     return tracks_dict
 
 def search_octo(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, artist, title):
+    """Searches the Subsonic server (and Octo-Fiesta) using multiple query variations."""
     url = SUBSONIC_URL+"/rest/search3"
     query = f"{artist} {title}"
     base_params = {
@@ -155,14 +164,14 @@ def search_octo(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, artist, title):
     return list(unique_tracks)
     
 def compare_tracks(tracks_dict):
-    # if isexternal false we take the biggest similarity between false isexternal, if not then we stil take the biggest similarity between all
-    # priorize internal sound
+    """Prioritizes local tracks over external ones, then picks the highest similarity."""
     if tracks_dict:
         result = max(tracks_dict, key=lambda x: (not x['isexternal'], x['similarity'])) 
         return result
     return None
 
 def download_tracks(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, id):
+    """Triggers a download/stream on the Subsonic server (used for Octo-Fiesta integration)."""
     url = SUBSONIC_URL+"/rest/stream"
     params = {
         'u': SUBSONIC_USER,
@@ -184,6 +193,7 @@ def download_tracks(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, id):
         return None
     
 def start_scan(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
+    """Triggers a library scan and waits for it to complete."""
     scan_url = SUBSONIC_URL+"/rest/startScan"
     status_url = SUBSONIC_URL + "/rest/getScanStatus"
     params = {
@@ -269,6 +279,10 @@ def get_playlists_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
     url = SUBSONIC_URL + "/rest/getPlaylist"
     playlists = get_all_playlists(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
     for playlist in playlists:
+        playlist_name = playlist.get('name', '')
+        if "Weekly Discovery" in playlist_name: 
+            print(f"[TEST] Playlist ignorée pour la protection : {playlist_name}")
+            continue
         id = playlist.get('id')
         params = {
             'u': SUBSONIC_USER,
@@ -326,6 +340,10 @@ def get_liked_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
     return all_songs_ids
 
 def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_datas):
+    """
+    Determines which files from the PREVIOUS weekly playlist should be deleted.
+    Protects files if they were liked (starred) or added to other playlists in the meantime.
+    """
     playlist_or_starred = []
     in_playlist_songs = get_playlists_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
     liked_songs = get_liked_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
@@ -364,89 +382,123 @@ def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_d
     return to_delete
 
 def cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete):
+    """
+    Performs physical file deletion. Includes 'Surgical Cleaning' logic to find files 
+    even if the filename doesn't perfectly match the Subsonic path.
+    """
     url = SUBSONIC_URL + "/rest/getSong"
-    song_id = None
     base_params = {
         'u': SUBSONIC_USER,
         'p': SUBSONIC_PASS,
         'v': '1.16.1',
         'c': 'python-script',
-        'f': 'json',
-        'id': song_id
+        'f': 'json'
     }
     deleted_count = 0
     print(f"Starting cleanup for {len(to_delete)} items...")
 
-    for song in to_delete:
+    for song_id in to_delete:
         params = base_params.copy()
-        params['id'] = song
+        params['id'] = song_id
         data = subsonic_get_json(url, params)
-        if not data:
-            return []
-        try:
-            resp = data.get("subsonic-response", {})
-            song = resp.get('song', {})
-            relative_path = song.get('path')
-            title = song.get('title')
-            if not relative_path:
-                print(f"[Warn] No path returned for ID {song_id}")
-                continue
-            full_path = os.path.join(LOCAL_DOWNLOAD_PATH, relative_path)
-            if os.path.exists(full_path):
-                os.remove(full_path)
-                print(f"[Deleted] Direct match: {full_path}")
-                deleted_count += 1
-                continue
-            folder_path = os.path.dirname(full_path)
-            if not os.path.isdir(folder_path):
-                print(f"[Error] Folder not found: {folder_path}")
-                continue
-                
-            # On liste les fichiers du dossier
-            files_in_dir = os.listdir(folder_path)
-            found_file = None
+        
+        if not data: continue
+        
+        resp = data.get("subsonic-response", {})
+        song = resp.get('song', {})
+        relative_path = song.get('path')
+        title = song.get('title')
+        
+        if not relative_path or not title:
+            continue
+
+        # 1. Chemin théorique
+        full_path_theorique = os.path.join(LOCAL_DOWNLOAD_PATH, relative_path)
+        
+        # 2. Suppression Directe (Match parfait)
+        if os.path.exists(full_path_theorique):
+            # os.remove(full_path_theorique) # <--- DECOMMENTER POUR ACTIVER
+            print(f"[Deleted] Direct match: {relative_path}")
+            deleted_count += 1
+            continue
+
+        # 3. Recherche de dossier (Album ou Artiste)
+        target_folder = os.path.dirname(full_path_theorique)
+        folders_to_check = []
+        
+        if os.path.exists(target_folder):
+            folders_to_check.append(target_folder)
+        
+        parent_folder = os.path.dirname(target_folder)
+        if os.path.exists(parent_folder) and parent_folder not in folders_to_check:
+             if parent_folder != LOCAL_DOWNLOAD_PATH: 
+                folders_to_check.append(parent_folder)
+
+        if not folders_to_check:
+            # Cas rare : dossier introuvable du tout
+            # print(f"[Skip] Dossier introuvable pour : {relative_path}") 
+            continue
+
+        # Nettoyage Cible
+        clean_target_title = utility.clean_title(title).lower()
+        if not clean_target_title: continue
+
+        found_in_folder = False
+        
+        for folder in folders_to_check:
+            if found_in_folder: break
             
-            # Nettoyage du titre cible pour la comparaison (ex: enlever ponctuation)
-            clean_target_title = utility.clean_title(title).lower() if title else ""
+            try:
+                files_in_dir = os.listdir(folder)
+            except OSError:
+                continue
 
             for f in files_in_dir:
-                # On ignore les fichiers non audio (images, nfo, etc) pour éviter les faux positifs
                 if not f.lower().endswith(('.mp3', '.flac', '.m4a', '.wav', '.opus')):
                     continue
                 
-                # Comparaison : est-ce que le titre est dans le nom de fichier ?
-                # On utilise utility.clean_title sur le nom du fichier aussi
-                f_name_clean = utility.clean_title(f).lower()
+                # --- V3 : NETTOYAGE CHIRURGICAL ---
+                # 1. Enlever l'extension (.flac)
+                name_no_ext = os.path.splitext(f)[0]
                 
-                if clean_target_title and clean_target_title in f_name_clean:
-                    found_file = f
-                    break
-            
-            if found_file:
-                real_file_path = os.path.join(folder_path, found_file)
-                os.remove(real_file_path)
-                print(f"[Deleted] Fuzzy match: {found_file} (Target was: {title})")
-                deleted_count += 1
-            else:
-                print(f"[Failed] Could not locate file for: {title} in {folder_path}")
-                print(f"   -> Expected path was: {relative_path}")
+                # 2. Enlever les chiffres et tirets au début (ex: "01 - ", "02. ")
+                # Regex : Début (^) + Chiffres (\d+) + Espace/Point/Tiret optionnels
+                name_clean_prefix = re.sub(r'^\d+\s*[-.]\s*', '', name_no_ext)
+                
+                # 3. Nettoyage standard (accents, ponctuation restante)
+                clean_filename = utility.clean_title(name_clean_prefix).lower()
+                
+                # --- STRATEGIE DE COMPARAISON ---
 
-        except Exception as e:
-            print(f"Error cleaning song ID {song_id}: {e}")
-            
+                # A. Inclusion Directe (Le titre cible est DANS le nom de fichier nettoyé)
+                # Ex: Cible="Diamonds", Fichier="Diamonds" (après nettoyage du "01 -")
+                # On met une sécurité sur la longueur pour ne pas matcher des mots trop courts comme "A"
+                if len(clean_target_title) > 3 and clean_target_title == clean_filename:
+                    score = 100
+                elif len(clean_target_title) > 4 and clean_target_title in clean_filename:
+                    # Ex: Cible="Forever", Fichier="Forever (Live)" -> clean="forever live" -> match
+                    score = 99 
+                else:
+                    # B. Fuzzy Matching (Secours)
+                    # partial_ratio est très bon quand l'un est inclus dans l'autre
+                    score = fuzz.partial_token_set_ratio(clean_target_title, clean_filename)
+
+                # SEUIL : 80 (Suffisant car on a bien nettoyé avant)
+                if score >= 80:
+                    real_file_path = os.path.join(folder, f)
+                    
+                    # --- ACTION ---
+                    # os.remove(real_file_path) # <--- DECOMMENTER POUR ACTIVER
+                    print(f"[Safe Clean] Je vais supprimer : {f}")
+                    print(f"             (Cible: {title} | CleanFile: {clean_filename} | Score: {score})")
+                    # --------------
+                    
+                    deleted_count += 1
+                    found_in_folder = True
+                    break 
+                
+                # Debug seulement si score moyen pour comprendre
+                elif score > 60:
+                     print(f"   [Debug] Rejeté (Score {score}): '{clean_filename}' vs '{clean_target_title}'")
+
     return deleted_count
-            
-def delete_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_id):
-    url = SUBSONIC_URL + "/rest/deletePlaylist"
-    params = {
-        'u': SUBSONIC_USER,
-        'p': SUBSONIC_PASS,
-        'v': '1.16.1',
-        'c': 'python-script',
-        'f': 'json',
-        'id': playlist_id
-    }
-    data = subsonic_get_json(url, params)
-    if data:
-        print(f"Playlist {playlist_id} deleted successfully.")
-    return data
