@@ -16,9 +16,8 @@ SUBSONIC_URL = os.getenv('SUBSONIC_URL')
 LOCAL_DOWNLOAD_PATH = os.getenv('LOCAL_DOWNLOAD_PATH')
 
 def main():
-    # --- STEP 0 : VERIFICATION ---
-    # Get the actual "playlist name" on listenbrainz
-
+# --- STEP 0: INITIALIZATION & CHECK ---
+    # Fetch playlist info from ListenBrainz and check if we already processed it
     playlist_info = lb.get_weekly_playlist_infos(LB_BASE_URL, LB_USER)
     if not playlist_info:
         print("CRITICAL: Can't get playlist info from ListenBrainz")
@@ -69,6 +68,12 @@ def main():
     success_dl_youtube = []
     not_found_tracks = [] # for tracks not found in subsonic or youtube
 
+    # --- STEP 1: SEARCH & MATCH ---
+    # Loop through ListenBrainz tracks and look for them on the Subsonic server
+    # 1. Check local library (isExternal: False)
+    # 2. Check Subsonic external sources (isExternal: True)
+    # 3. Fallback to YouTube if nothing is found
+
     print("--- STEP 1 : SEARCH ---")
     if not lb_songs:
         print("No song in ListenBrainz Playlist")
@@ -106,6 +111,8 @@ def main():
             print(f"-> Not found on Subsonic -> Queueing for YouTube")
             to_download_youtube.append(song)         
 
+    # --- STEP 2: DOWNLOAD FROM SUBSONIC ---
+    # Trigger Subsonic/Octo-Fiesta downloads and scan library to update IDs
 
     print("--- STEP 2 : DOWNLOAD FROM SUBSONIC ---")
     if to_download_subsonic:
@@ -138,6 +145,9 @@ def main():
                     }
                 to_download_youtube.append(song_fallback)
     
+    # --- STEP 3: YOUTUBE FALLBACK ---
+    # For tracks not found on Subsonic, search and download from YouTube
+
     print("--- STEP 3 : PROCESS YT FALLBACKS ---")
     # to_download_youtube contain track title, artist and album
     if to_download_youtube:
@@ -157,6 +167,10 @@ def main():
                 not_found_tracks.append(track) # Echec Search
         if attempted_downloads:
             print("Verify youtube dl ---")
+
+    # --- STEP 4: SCAN & VERIFICATION ---
+    # Final scan to ensure all new downloads are indexed and assigned internal IDs
+
             # trigger a scan on navidrome to get ids
             subsonic.start_scan(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS) 
 
@@ -174,33 +188,29 @@ def main():
                     print(f"Warning: {item['title']} downloaded but not found in Subsonic scan yet.")
                     not_found_tracks.append(item)
 
+    # --- STEP 5: CLEANUP ---
+    # Delete the previous week's playlist from the server
+    # Physically delete files that are no longer needed (not starred, not in other playlists)
+
     print("--- STEP 5 : CLEANUP (Old Playlist & Files) ---")
     if old_data:
-        # 1. Récupérer le nom de l'ancienne playlist
         old_name = old_data.get("playlist_name")
         
         if old_name:
-            # On cherche l'ID de cette ancienne playlist pour la supprimer
             all_playlists = subsonic.get_all_playlists(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
-            # On trouve la playlist qui a le même nom
             old_playlist_id = next((p['id'] for p in all_playlists if p['name'] == old_name), None)
 
             if old_playlist_id:
                 print(f"Deleting old playlist '{old_name}' (ID: {old_playlist_id})...")
                 subsonic.delete_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_id)
-                # Petite pause pour laisser le temps à Navidrome de mettre à jour sa BDD
                 time.sleep(2) 
             else:
                 print(f"Old playlist '{old_name}' not found on server (already deleted?).")
         
-        # 2. Calculer les fichiers à supprimer
-        # Maintenant que l'ancienne playlist est supprimée, ses fichiers ne sont plus "protégés" 
-        # par get_playlists_songs(), sauf s'ils sont dans la NOUVELLE playlist ou en favoris.
         to_delete_ids = subsonic.flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_data)
         
         if to_delete_ids:
             print(f"Starting cleanup of {len(to_delete_ids)} obsolete tracks...")
-            # Appel de la fonction cleaning
             deleted_count = subsonic.cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete_ids)
             print(f"Cleanup finished. {deleted_count} files removed.")
         else:
@@ -209,6 +219,10 @@ def main():
     else:
         print("No old_data.json found. Skipping cleanup.")    
     data_to_save = {}
+
+    # --- STEP 6: PLAYLIST CREATION ---
+    # Create the new Weekly Discovery playlist on the server and update data.json
+
     print("--- STEP 6 : CREATE PLAYLIST and data.json ---")
     if success_dl_subsonic or success_dl_youtube:
         data_to_save = {
