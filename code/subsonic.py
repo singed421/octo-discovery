@@ -356,7 +356,7 @@ def get_liked_songs(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
     all_songs_ids = list(dict.fromkeys(all_songs_ids))
     return all_songs_ids
 
-def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_datas, extra_not_delete=None):
+def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_datas):
     """
     Determines which files from the PREVIOUS weekly playlist should be deleted.
     Protects files if they were liked (starred) or added to other playlists in the meantime.
@@ -379,8 +379,6 @@ def flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_d
     already_local_ids = [track['download_id'] for track in already_local if 'download_id' in track]
 
     not_delete = set(already_local_ids) | set(matches)
-    if extra_not_delete:
-        not_delete |= set(extra_not_delete)
 
     all_tracks_ids = old_playlist_datas.get("all_tracks_ids", [])
 

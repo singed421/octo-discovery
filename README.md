@@ -7,7 +7,7 @@ Sync your **ListenBrainz Weekly Discovery** playlist into your **Subsonic-compat
 
 - Fetches the current **Weekly Discovery** playlist from ListenBrainz
 - Searches tracks in Subsonic (`search3`) using multiple cleaned/matched variants
-- If a track is found as **External** (via an external provider such as *Octo-Fiesta*), it triggers a **download** and then **rescans** the library until it becomes local — or adds it directly as an external ID if **pre-download is disabled**
+- If a track is found as **External** (via an external provider such as *Octo-Fiesta*), it triggers a **download** and then **rescans** the library until it becomes local
 - If Subsonic search/download fails, it falls back to **YouTube** using **yt-dlp** + **FFmpeg**, writes the audio into your music library, and rescans (configurable)
 - Creates a Subsonic playlist containing the resulting track IDs
 - Cleanup old playlist except : starred or added in another playlist or already locales tracks
@@ -21,10 +21,8 @@ Sync your **ListenBrainz Weekly Discovery** playlist into your **Subsonic-compat
 3. Search in Subsonic with fuzzy/normalized queries
 4. If found:
    - **Local** result → add directly to the final playlist
-   - **External** result → depends on `PRE_DOWNLOAD`:
-     - `true` (default): trigger download, rescan, verify it becomes local → add
-     - `false`: add the external ID directly to the playlist (Octo-Fiesta downloads on the fly when you listen)
-5. If not found / download failed (only when `PRE_DOWNLOAD=true`):
+   - **External** result → trigger download, rescan, verify it becomes local → add
+5. If not found / download failed:
    - **YouTube fallback** (if `YOUTUBE_FALLBACK=true`) → search, download audio, tag it, save to your library → rescan → add
    - If `YOUTUBE_FALLBACK=false` → track is skipped
 6. Create a new Subsonic playlist
@@ -95,22 +93,18 @@ SUBSONIC_PASS=your_subsonic_password
 # Local music library path (where YouTube downloads will be saved)
 # IMPORTANT: this must be inside (or equal to) the folder your server scans.
 LOCAL_DOWNLOAD_PATH=/path/to/your/music/library
-# Toggles (all default to true if omitted)
+# Toggle (defaults to true if omitted)
 YOUTUBE_FALLBACK=true
-PRE_DOWNLOAD=true
-CLEANUP_OTF=true
 ```
 #### Notes
 LOCAL_DOWNLOAD_PATH must be part of your server's scanned library, otherwise the rescan step won't pick up new YouTube downloads.
 The script writes data.json and keeps old_data.json to manage cleanup between weekly runs.
 
-#### Toggles
+#### Toggle
 
 | Variable | Default | Description |
 |---|---|---|
 | `YOUTUBE_FALLBACK` | `true` | When `true`, tracks not found on Subsonic are searched and downloaded from YouTube. When `false`, those tracks are simply skipped. |
-| `PRE_DOWNLOAD` | `true` | When `true`, external tracks are pre-downloaded and rescanned before being added to the playlist. When `false`, external track IDs are added directly — Octo-Fiesta will download them on the fly when you listen. **Overrides `YOUTUBE_FALLBACK` to off** (no downloads at all). |
-| `CLEANUP_OTF` | `true` | Only used when `PRE_DOWNLOAD=false`. When `true`, the script will attempt to find and clean up files that were downloaded on the fly during the previous week (same safety rules: not starred, not in another playlist). When `false`, those files are kept. |
 
 ### Usage
 
@@ -137,7 +131,6 @@ _Stores the state of the latest run:_
 - playlist_name
 - subsonic_downloaded (IDs downloaded via external provider and confirmed local after scan)
 - youtube_downloaded (IDs detected after YouTube download + scan)
-- on_the_fly (external IDs added without pre-downloading, used for cleanup tracking)
 - all_tracks_ids (final IDs added to the playlist)
 - not_found (tracks that could not be resolved)
 - already_local (tracks already in the library)

@@ -15,8 +15,6 @@ SUBSONIC_PASS = os.getenv('SUBSONIC_PASS')
 SUBSONIC_URL = os.getenv('SUBSONIC_URL')
 LOCAL_DOWNLOAD_PATH = os.getenv('LOCAL_DOWNLOAD_PATH')
 YOUTUBE_FALLBACK = os.getenv('YOUTUBE_FALLBACK', 'true').lower() == 'true'
-PRE_DOWNLOAD = os.getenv('PRE_DOWNLOAD', 'true').lower() == 'true'
-CLEANUP_OTF = os.getenv('CLEANUP_OTF', 'true').lower() == 'true'
 
 def main():
 # --- STEP 0: INITIALIZATION & CHECK ---
@@ -34,13 +32,13 @@ def main():
     if os.path.exists('data.json'):
         try:
             with open('data.json', 'r', encoding='utf-8') as f:
-                existing_data = json.load(f)                
-                
+                existing_data = json.load(f)
+
                 # Vérification si le nom de la playlist est identique
                 if existing_data.get('playlist_name') == playlist_name:
                     print(f"Playlist '{playlist_name}' already exists (watch data.json).")
                     print("Script shutdown.")
-                    return 
+                    return
                 try:
                     os.rename('data.json', 'old_data.json')
                     print("Old data.json moved as 'old_data.json'")
@@ -61,7 +59,7 @@ def main():
     print(f"New playlist detected: {playlist_name}. Processing...")
 
     # get the songs list of the current playlist on listenbrainz with artist, title and album
-    lb_songs = lb.get_song_in_playlist(mbid, LB_BASE_URL) 
+    lb_songs = lb.get_song_in_playlist(mbid, LB_BASE_URL)
 
     already_local = [] #dict for local tracks that we don't want to process
     full_tracks_ids = [] # dict for all the tracks detected ids
@@ -70,7 +68,6 @@ def main():
     success_dl_subsonic = []
     success_dl_youtube = []
     not_found_tracks = [] # for tracks not found in subsonic or youtube
-    on_the_fly_ids = [] # external IDs added without pre-downloading (for cleanup tracking)
 
     # --- STEP 1: SEARCH & MATCH ---
     # Loop through ListenBrainz tracks and look for them on the Subsonic server
@@ -105,19 +102,16 @@ def main():
             else:
                 print(f"-> External found (queued for Subsonic DL)")
                 best_match['original_album'] = album
-                best_match['original_artist'] = artist 
+                best_match['original_artist'] = artist
                 best_match['original_title'] = title
                 to_download_subsonic.append(best_match)
                 print(f"Added to download list {best_match['artist']} {best_match['title']} ; id = {best_match['download_id']}")
                 print("-"*30)
         # 3. not found on subsonic -> queing for youtube or skip
         else:
-            if PRE_DOWNLOAD and YOUTUBE_FALLBACK:
+            if YOUTUBE_FALLBACK:
                 print(f"-> Not found on Subsonic -> Queueing for YouTube")
                 to_download_youtube.append(song)
-            elif not PRE_DOWNLOAD:
-                print(f"-> Not found on Subsonic (pre-download disabled, skipping)")
-                not_found_tracks.append(song)
             else:
                 print(f"-> Not found on Subsonic (YouTube fallback disabled, skipping)")
                 not_found_tracks.append(song)
@@ -126,7 +120,7 @@ def main():
     # Trigger Subsonic/Octo-Fiesta downloads and scan library to update IDs
 
     print("--- STEP 2 : DOWNLOAD FROM SUBSONIC ---")
-    if to_download_subsonic and PRE_DOWNLOAD:
+    if to_download_subsonic:
         for item in to_download_subsonic:
             time.sleep(3)
             print(f"Triggering Subsonic DL for: {item['artist']} - {item['title']}")
@@ -163,24 +157,12 @@ def main():
                         'title': item['original_title'],
                         'album': item.get('original_album', 'Unknown Album')
                     })
-    elif to_download_subsonic and not PRE_DOWNLOAD:
-        print(f"Pre-download disabled. {len(to_download_subsonic)} external track(s) added to playlist (on-the-fly).")
-        for item in to_download_subsonic:
-            on_the_fly_ids.append(item['download_id'])
-            full_tracks_ids.append(item['download_id'])
-    
+
     # --- STEP 3: YOUTUBE FALLBACK ---
     # For tracks not found on Subsonic, search and download from YouTube
 
     print("--- STEP 3 : PROCESS YT FALLBACKS ---")
-    if not PRE_DOWNLOAD:
-        if to_download_youtube:
-            print(f"Pre-download disabled. {len(to_download_youtube)} track(s) skipped (no YouTube fallback).")
-            not_found_tracks.extend(to_download_youtube)
-            to_download_youtube.clear()
-        else:
-            print("Pre-download disabled. No YouTube fallback needed.")
-    elif not YOUTUBE_FALLBACK:
+    if not YOUTUBE_FALLBACK:
         if to_download_youtube:
             print(f"YouTube fallback is disabled. {len(to_download_youtube)} track(s) skipped.")
             not_found_tracks.extend(to_download_youtube)
@@ -199,7 +181,7 @@ def main():
                 if success:
                     attempted_downloads.append(track)
                 else:
-                    not_found_tracks.append(track) # Echec DL malgré search ok    
+                    not_found_tracks.append(track) # Echec DL malgré search ok
             else:
                 print(f"YT Search failed for {track['artist']} - {track['title']}")
                 not_found_tracks.append(track) # Echec Search
@@ -210,7 +192,7 @@ def main():
     # Final scan to ensure all new downloads are indexed and assigned internal IDs
 
             # trigger a scan on navidrome to get ids
-            subsonic.start_scan(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS) 
+            subsonic.start_scan(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
 
             # to_download_youtube contain track title from LB and artist from LB, album
             for item in attempted_downloads:
@@ -233,7 +215,7 @@ def main():
     print("--- STEP 5 : CLEANUP (Old Playlist & Files) ---")
     if old_data:
         old_name = old_data.get("playlist_name")
-        
+
         if old_name:
             all_playlists = subsonic.get_all_playlists(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS)
             old_playlist_id = next((p['id'] for p in all_playlists if p['name'] == old_name), None)
@@ -241,60 +223,22 @@ def main():
             if old_playlist_id:
                 print(f"Deleting old playlist '{old_name}' (ID: {old_playlist_id})...")
                 subsonic.delete_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_playlist_id)
-                time.sleep(2) 
+                time.sleep(2)
             else:
                 print(f"Old playlist '{old_name}' not found on server (already deleted?).")
-        
-        # Handle on-the-fly tracks from previous run
-        old_otf_ids = old_data.get("on_the_fly", [])
-        extra_not_delete = None
 
-        if old_otf_ids and CLEANUP_OTF:
-            # Re-search on-the-fly tracks to find their local IDs (if they were played/downloaded)
-            print(f"CLEANUP_OTF enabled. Re-searching {len(old_otf_ids)} on-the-fly track(s)...")
-            resolved_local_ids = []
-            for otf_id in old_otf_ids:
-                time.sleep(0.5)
-                # Get track info from Subsonic using the old external ID
-                song_data = subsonic.perform_requests(
-                    SUBSONIC_URL + "/rest/getSong",
-                    {'u': SUBSONIC_USER, 'p': SUBSONIC_PASS, 'v': '1.16.1', 'c': 'python-script', 'f': 'json', 'id': otf_id}
-                )
-                if song_data:
-                    song_info = song_data.get("subsonic-response", {}).get("song", {})
-                    otf_artist = song_info.get("artist", "")
-                    otf_title = song_info.get("title", "")
-                    if otf_artist and otf_title:
-                        search_results = subsonic.search_octo(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, otf_artist, otf_title)
-                        local_match = subsonic.compare_tracks(search_results)
-                        if local_match and local_match['isexternal'] == False:
-                            print(f"  On-the-fly track now local: {otf_title} -> ID: {local_match['download_id']}")
-                            resolved_local_ids.append(local_match['download_id'])
-                        else:
-                            print(f"  On-the-fly track not yet local: {otf_title} (skipping cleanup)")
-                    else:
-                        print(f"  Could not resolve on-the-fly track ID: {otf_id}")
-                else:
-                    print(f"  Could not fetch info for on-the-fly track ID: {otf_id}")
-            # Inject resolved local IDs into old_data so flag_for_cleaning can target them
-            if resolved_local_ids:
-                old_data.setdefault("subsonic_downloaded", []).extend(resolved_local_ids)
-                old_data.setdefault("all_tracks_ids", []).extend(resolved_local_ids)
-        elif old_otf_ids and not CLEANUP_OTF:
-            print(f"CLEANUP_OTF disabled. {len(old_otf_ids)} on-the-fly track(s) will be protected from cleanup.")
-            extra_not_delete = old_otf_ids
+        to_delete_ids = subsonic.flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_data)
 
-        to_delete_ids = subsonic.flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_data, extra_not_delete=extra_not_delete)
-        
         if to_delete_ids:
             print(f"Starting cleanup of {len(to_delete_ids)} obsolete tracks...")
             deleted_count = subsonic.cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete_ids)
             print(f"Cleanup finished. {deleted_count} files removed.")
         else:
             print("Nothing to clean up.")
-            
+
     else:
-        print("No old_data.json found. Skipping cleanup.")    
+        print("No old_data.json found. Skipping cleanup.")
+
     # --- STEP 6: PLAYLIST CREATION ---
     # Create the new Weekly Discovery playlist on the server and update data.json
 
@@ -303,7 +247,6 @@ def main():
         "playlist_name": playlist_name,
         "subsonic_downloaded": success_dl_subsonic,
         "youtube_downloaded": success_dl_youtube,
-        "on_the_fly": on_the_fly_ids,
         "all_tracks_ids": full_tracks_ids,
         "not_found": not_found_tracks,
         "already_local": already_local
@@ -316,7 +259,7 @@ def main():
 
     with open('data.json', 'w', encoding='utf-8') as f:
         json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-    
+
 
 if __name__ == "__main__":
     main()
