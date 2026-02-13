@@ -14,6 +14,7 @@ SUBSONIC_USER = os.getenv('SUBSONIC_USER')
 SUBSONIC_PASS = os.getenv('SUBSONIC_PASS')
 SUBSONIC_URL = os.getenv('SUBSONIC_URL')
 LOCAL_DOWNLOAD_PATH = os.getenv('LOCAL_DOWNLOAD_PATH')
+YOUTUBE_FALLBACK = os.getenv('YOUTUBE_FALLBACK', 'true').lower() == 'true'
 
 def main():
 # --- STEP 0: INITIALIZATION & CHECK ---
@@ -106,10 +107,14 @@ def main():
                 to_download_subsonic.append(best_match)
                 print(f"Added to download list {best_match['artist']} {best_match['title']} ; id = {best_match['download_id']}")
                 print("-"*30)
-        # 3. not found on subsonic -> queing for youtube
+        # 3. not found on subsonic -> queing for youtube or skip
         else:
-            print(f"-> Not found on Subsonic -> Queueing for YouTube")
-            to_download_youtube.append(song)         
+            if YOUTUBE_FALLBACK:
+                print(f"-> Not found on Subsonic -> Queueing for YouTube")
+                to_download_youtube.append(song)
+            else:
+                print(f"-> Not found on Subsonic (YouTube fallback disabled, skipping)")
+                not_found_tracks.append(song)
 
     # --- STEP 2: DOWNLOAD FROM SUBSONIC ---
     # Trigger Subsonic/Octo-Fiesta downloads and scan library to update IDs
@@ -137,18 +142,33 @@ def main():
                 success_dl_subsonic.append(newly_downloaded_match['download_id'])
                 full_tracks_ids.append(newly_downloaded_match['download_id'])
             else:
-                print(f"Failure: {item['title']} download failed via Subsonic. Moving to YouTube fallback.")
-                song_fallback = {
+                if YOUTUBE_FALLBACK:
+                    print(f"Failure: {item['title']} download failed via Subsonic. Moving to YouTube fallback.")
+                    song_fallback = {
+                            'artist': item['original_artist'],
+                            'title': item['original_title'],
+                            'album': item.get('original_album', 'Unknown Album')
+                        }
+                    to_download_youtube.append(song_fallback)
+                else:
+                    print(f"Failure: {item['title']} download failed via Subsonic (YouTube fallback disabled, skipping)")
+                    not_found_tracks.append({
                         'artist': item['original_artist'],
                         'title': item['original_title'],
                         'album': item.get('original_album', 'Unknown Album')
-                    }
-                to_download_youtube.append(song_fallback)
+                    })
     
     # --- STEP 3: YOUTUBE FALLBACK ---
     # For tracks not found on Subsonic, search and download from YouTube
 
     print("--- STEP 3 : PROCESS YT FALLBACKS ---")
+    if not YOUTUBE_FALLBACK:
+        if to_download_youtube:
+            print(f"YouTube fallback is disabled. {len(to_download_youtube)} track(s) skipped.")
+            not_found_tracks.extend(to_download_youtube)
+            to_download_youtube.clear()
+        else:
+            print("YouTube fallback is disabled. No tracks to skip.")
     # to_download_youtube contain track title, artist and album
     if to_download_youtube:
         attempted_downloads = []
