@@ -253,6 +253,23 @@ def create_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_name, s
     print(f"Playlist '{playlist_name}' created with {len(songs_id)} titles")
     return data
 
+def delete_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_id):
+    url = SUBSONIC_URL + "/rest/deletePlaylist"
+    params = {
+        'u': SUBSONIC_USER,
+        'p': SUBSONIC_PASS,
+        'v': '1.16.1',
+        'c': 'python-script',
+        'f': 'json',
+        'id': playlist_id
+    }
+    data = subsonic_get_json(url, params)
+    if not data:
+        print(f"Failed to delete playlist ID: {playlist_id}")
+        return None
+    print(f"Playlist ID {playlist_id} deleted.")
+    return data
+
 def get_all_playlists(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS):
     url = SUBSONIC_URL + "/rest/getPlaylists"
     params = {
