@@ -301,19 +301,15 @@ def main():
     # Create the new Weekly Discovery playlist on the server and update data.json
 
     print("--- STEP 6 : CREATE PLAYLIST and data.json ---")
-    if success_dl_subsonic or success_dl_youtube or on_the_fly_ids:
-        data_to_save = {
-            "playlist_name": playlist_name,
-            "subsonic_downloaded": success_dl_subsonic,
-            "youtube_downloaded": success_dl_youtube,
-            "on_the_fly": on_the_fly_ids,
-            "all_tracks_ids": full_tracks_ids,
-            "not_found": not_found_tracks,
-            "already_local": already_local
-        }
-
-    else:
-        print("No tracks found or downloaded. Playlist not created.")
+    data_to_save = {
+        "playlist_name": playlist_name,
+        "subsonic_downloaded": success_dl_subsonic,
+        "youtube_downloaded": success_dl_youtube,
+        "on_the_fly": on_the_fly_ids,
+        "all_tracks_ids": full_tracks_ids,
+        "not_found": not_found_tracks,
+        "already_local": already_local
+    }
 
     if full_tracks_ids:
         subsonic.create_playlist(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, playlist_name, list(full_tracks_ids))
