@@ -436,7 +436,7 @@ def cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to
         
         # 2. Suppression Directe (Match parfait)
         if os.path.exists(full_path_theorique):
-            # os.remove(full_path_theorique) # <--- DECOMMENTER POUR ACTIVER
+            os.remove(full_path_theorique)
             print(f"[Deleted] Direct match: {relative_path}")
             deleted_count += 1
             continue
@@ -506,11 +506,9 @@ def cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to
                 if score >= 80:
                     real_file_path = os.path.join(folder, f)
                     
-                    # --- ACTION ---
-                    # os.remove(real_file_path) # <--- DECOMMENTER POUR ACTIVER
-                    print(f"[Safe Clean] Je vais supprimer : {f}")
-                    print(f"             (Cible: {title} | CleanFile: {clean_filename} | Score: {score})")
-                    # --------------
+                    os.remove(real_file_path)
+                    print(f"[Deleted] Fuzzy match: {f}")
+                    print(f"          (Cible: {title} | CleanFile: {clean_filename} | Score: {score})")
                     
                     deleted_count += 1
                     found_in_folder = True
