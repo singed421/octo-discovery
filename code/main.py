@@ -295,8 +295,6 @@ def main():
             
     else:
         print("No old_data.json found. Skipping cleanup.")    
-    data_to_save = {}
-
     # --- STEP 6: PLAYLIST CREATION ---
     # Create the new Weekly Discovery playlist on the server and update data.json
 
