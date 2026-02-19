@@ -15,6 +15,7 @@ SUBSONIC_PASS = os.getenv('SUBSONIC_PASS')
 SUBSONIC_URL = os.getenv('SUBSONIC_URL')
 LOCAL_DOWNLOAD_PATH = os.getenv('LOCAL_DOWNLOAD_PATH')
 YOUTUBE_FALLBACK = os.getenv('YOUTUBE_FALLBACK', 'true').lower() == 'true'
+CLEANUP_DOWNLOADS = os.getenv('CLEANUP_DOWNLOADS', 'true').lower() == 'true'
 
 def main():
 # --- STEP 0: INITIALIZATION & CHECK ---
@@ -227,14 +228,17 @@ def main():
             else:
                 print(f"Old playlist '{old_name}' not found on server (already deleted?).")
 
-        to_delete_ids = subsonic.flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_data)
+        if CLEANUP_DOWNLOADS:
+            to_delete_ids = subsonic.flag_for_cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, old_data)
 
-        if to_delete_ids:
-            print(f"Starting cleanup of {len(to_delete_ids)} obsolete tracks...")
-            deleted_count = subsonic.cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete_ids)
-            print(f"Cleanup finished. {deleted_count} files removed.")
+            if to_delete_ids:
+                print(f"Starting cleanup of {len(to_delete_ids)} obsolete tracks...")
+                deleted_count = subsonic.cleaning(SUBSONIC_URL, SUBSONIC_USER, SUBSONIC_PASS, LOCAL_DOWNLOAD_PATH, to_delete_ids)
+                print(f"Cleanup finished. {deleted_count} files removed.")
+            else:
+                print("Nothing to clean up.")
         else:
-            print("Nothing to clean up.")
+            print("CLEANUP_DOWNLOADS is disabled. Skipping file cleanup.")
 
     else:
         print("No old_data.json found. Skipping cleanup.")
