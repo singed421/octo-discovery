@@ -27,7 +27,7 @@ Sync your **ListenBrainz Weekly Discovery** playlist into your **Subsonic-compat
    - If `YOUTUBE_FALLBACK=false` → track is skipped
 6. Create a new Subsonic playlist
 7. Save `data.json` (renaming previous to `old_data.json`)
-8. Cleanup old playlist and old downloaded files safely (avoids removing tracks still in playlists or starred or that were already downloaded)
+8. Cleanup old playlist and old downloaded files safely (avoids removing tracks still in playlists or starred or that were already downloaded). File deletion can be disabled with `CLEANUP_DOWNLOADS=false`
 
 ---
 
@@ -95,6 +95,7 @@ SUBSONIC_PASS=your_subsonic_password
 LOCAL_DOWNLOAD_PATH=/path/to/your/music/library
 # Toggle (defaults to true if omitted)
 YOUTUBE_FALLBACK=true
+CLEANUP_DOWNLOADS=true
 ```
 #### Notes
 LOCAL_DOWNLOAD_PATH must be part of your server's scanned library, otherwise the rescan step won't pick up new YouTube downloads.
@@ -105,6 +106,7 @@ The script writes data.json and keeps old_data.json to manage cleanup between we
 | Variable | Default | Description |
 |---|---|---|
 | `YOUTUBE_FALLBACK` | `true` | When `true`, tracks not found on Subsonic are searched and downloaded from YouTube. When `false`, those tracks are simply skipped. |
+| `CLEANUP_DOWNLOADS` | `true` | When `true`, downloaded files from the previous week's playlist are deleted during cleanup. When `false`, only the old playlist is removed but files are kept on disk. |
 
 ### Usage
 
